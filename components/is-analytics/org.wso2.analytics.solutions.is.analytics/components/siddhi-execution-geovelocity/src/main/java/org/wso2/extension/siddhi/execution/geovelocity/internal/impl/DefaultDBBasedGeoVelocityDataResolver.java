@@ -33,19 +33,34 @@ public class DefaultDBBasedGeoVelocityDataResolver implements GeoVelocityDataRes
         RDBMSGeoVelocityDataResolver.getInstance().init(configReader);
     }
 
+    /**
+     * Calls external system or database database to find the geovelocity data.
+     * Can be used by an extended class.
+     * @param username username
+     * @param city city
+     * @return geoVelocityData with last login time
+     */
     @Override
     public GeoVelocityData getGeoVelocityInfo(String username, String city) {
-        GeoVelocityData geoVelocityData;
-        geoVelocityData = RDBMSGeoVelocityDataResolver.getInstance().getGeoVelocityData
+        GeoVelocityData geoVelocityData = RDBMSGeoVelocityDataResolver.getInstance().getGeoVelocityData
                 (username, city);
         return geoVelocityData != null ? geoVelocityData : new GeoVelocityData(0L, 0);
     }
 
+    /**
+     * Calls external system or database database to find the geovelocity data.
+     * Can be used by an extended class.
+     * @param currentCity User's current login city
+     * @param previousCity User's previous login city
+     * @param currentCountry User's current login Country
+     * @param previousCountry User's previous login Country
+     * @return risk based on restricted location combinations
+     */
     @Override
     public GeoVelocityData checkLoginLocationValidity(String currentCity, String previousCity,
                                                       String currentCountry, String previousCountry) {
-        GeoVelocityData geoVelocityData;
-        geoVelocityData = RDBMSGeoVelocityDataResolver.getInstance().getRestrictedLocations(currentCity, previousCity,
+        GeoVelocityData geoVelocityData = RDBMSGeoVelocityDataResolver.getInstance()
+                .getRestrictedLocations(currentCity, previousCity,
                 currentCountry, previousCountry);
         return geoVelocityData != null ? geoVelocityData : new GeoVelocityData(0L, 0);
     }

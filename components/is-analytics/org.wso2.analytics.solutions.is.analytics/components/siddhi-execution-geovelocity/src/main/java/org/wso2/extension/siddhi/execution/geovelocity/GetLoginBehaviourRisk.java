@@ -20,6 +20,7 @@ package org.wso2.extension.siddhi.execution.geovelocity;
 import org.wso2.extension.siddhi.execution.geovelocity.api.GeoVelocityData;
 import org.wso2.extension.siddhi.execution.geovelocity.api.GeoVelocityDataResolver;
 import org.wso2.extension.siddhi.execution.geovelocity.internal.exception.GeoVelocityException;
+import org.wso2.extension.siddhi.execution.geovelocity.internal.impl.GeoVelocityDataResolverHolder;
 import org.wso2.siddhi.annotation.Example;
 import org.wso2.siddhi.annotation.Extension;
 import org.wso2.siddhi.annotation.Parameter;
@@ -31,23 +32,22 @@ import org.wso2.siddhi.core.executor.function.FunctionExecutor;
 import org.wso2.siddhi.core.util.config.ConfigReader;
 import org.wso2.siddhi.query.api.definition.Attribute;
 import org.wso2.siddhi.query.api.exception.SiddhiAppValidationException;
-import java.util.Collections;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.TimeUnit;
 
 /**
  * This class is to get the risk of login based on
  * the user's login behaviour.
  */
 @Extension(
-        name = "loginbehaviourbasedrisk",
+        name = "loginBehaviourBasedRisk",
         namespace = "geovelocity",
-        description = "Returns the login behaviour based calculated risk" +
+        description = "Returns the calculated login behaviour based risk" +
                 "considering the location and the time of the login",
         parameters = {
                 @Parameter(
                         name = "username",
-                        description = "current login location",
+                        description = "User's username",
                         type = {DataType.STRING}),
                 @Parameter(
                         name = "city",
@@ -61,67 +61,69 @@ import java.util.concurrent.atomic.AtomicBoolean;
         returnAttributes =
         @ReturnAttribute(
                 description = "Returns the login behaviour based calculated risk" +
-                        "considering the location and the time of the login",
+                        "considering the location and the time of the login." +
+                        "The range of the risk value is 0 to 1.",
                 type = {DataType.DOUBLE}),
         examples = @Example(
                 description = "This will return the login behaviour based risk " +
-                        "considering the location and the time of the login",
+                        "considering the location and the time of the login. " +
+                        "Assume Alex last login from New York was yesterday, and he tries to " +
+                        "login to the system today, then his login Behaviour based risk is low. But if he tries to " +
+                        "login to the system 1 year back, then his login behaviour is high. ",
                 syntax = "define stream GeovelocityStream(username string, city string," +
                         "currentlogintime string);\n" +
                         "from GeovelocityStream\n" +
-                        "select geo:loginbehaviourrisk(username, city," +
+                        "select geovelocity:loginBehaviourBasedRisk(username, city," +
                         "currentlogintime) as loginbehaviourbasedrisk \n" +
                         "insert into outputStream;")
 )
 
 public class GetLoginBehaviourRisk extends FunctionExecutor {
 
-    private static GeoVelocityDataResolver geoVelocityDataResolverImpl;
     private static final String DEFAULT_GEOVELOCITY_RESOLVER_CLASSNAME =
             "org.wso2.extension.siddhi.execution.geovelocity.internal.impl.DefaultDBBasedGeoVelocityDataResolver";
-    private static AtomicBoolean isExtensionConfigInitialized = new AtomicBoolean(false);
+    private static GeoVelocityDataResolver geoVelocityDataResolverImpl;
 
-    /**
-     * The initialization method for {@link FunctionExecutor},
-     * which will be called before other methods and validate
-     * the all configuration and getting the initial values.
-     *
-     * @param attributeExpressionExecutors are the executors of each attributes in the Function
-     * @param configReader                 this hold the {@link FunctionExecutor} extensions configuration reader.
-     * @param siddhiAppContext             Siddhi app runtime context
-     */
     @Override
     protected void init(ExpressionExecutor[] attributeExpressionExecutors, ConfigReader configReader,
                         SiddhiAppContext siddhiAppContext) {
+        initializeExtensionConfigs(configReader);
         if (attributeExpressionExecutors.length != 3) {
-            throw new SiddhiAppValidationException("Invalid no of arguments passed to geo:loginbehaviourrisk" +
+            throw new SiddhiAppValidationException("Invalid no of arguments passed to geovelocity:loginbehaviourrisk" +
                     " function, required 3, but found " + attributeExpressionExecutors.length);
         }
-
-        if (!isExtensionConfigInitialized.get()) {
-            initializeExtensionConfigs(configReader);
+        Attribute.Type attributeType = attributeExpressionExecutors[0].getReturnType();
+        if (attributeType != Attribute.Type.STRING) {
+            throw new SiddhiAppValidationException("Invalid parameter type found for first argument username of " +
+                    "geovelocity:loginbehaviourbasedrisk() function, required " + Attribute.Type.STRING + ", but found "
+                    + attributeType.toString());
+        }
+        Attribute.Type secondAttributeType = attributeExpressionExecutors[1].getReturnType();
+        if (secondAttributeType != Attribute.Type.STRING) {
+            throw new SiddhiAppValidationException("Invalid parameter type found for second argument city of " +
+                    "geovelocity:loginbehaviourbasedrisk() function, required " + Attribute.Type.STRING + ", but found "
+                    + secondAttributeType.toString());
+        }
+        Attribute.Type thirdaAttributeType = attributeExpressionExecutors[2].getReturnType();
+        if (thirdaAttributeType != Attribute.Type.LONG) {
+            throw new SiddhiAppValidationException("Invalid parameter type found for third argument " +
+                    "currentlogintime of geovelocity:loginbehaviourbasedrisk() function, required "
+                    + Attribute.Type.LONG + ", but found " + thirdaAttributeType.toString());
         }
     }
 
-    /**
-     * The main execution method which will be called upon event arrival
-     * when there are more than one Function parameter
-     *
-     * @param data the runtime values of Function parameters
-     * @return the Function result
-     */
     @Override
     protected Object execute(Object[] data) {
-        GeoVelocityData geoVelocityData;
         String username = data[0].toString();
         String city = data[1].toString();
         Long currentLoginTime = Long.parseLong(data[2].toString());
-        geoVelocityData = geoVelocityDataResolverImpl.getGeoVelocityInfo(username, city);
+        GeoVelocityData geoVelocityData = geoVelocityDataResolverImpl.getGeoVelocityInfo(username, city);
         Long lastLoginTime = geoVelocityData.getLoginBehaviourBasedRisk();
         double risk;
-        // Time difference is convert to days by deviding miliseconds by 1000*60*60*24.
         if (lastLoginTime != 0L) {
-            double timeDifference = (currentLoginTime - lastLoginTime) / 86400000.00;
+            //Time difference is converted to days.
+            long timeDifference = TimeUnit.MILLISECONDS.toDays(currentLoginTime - lastLoginTime);
+            //Risk was calculated by using the formula of (1 - e^(-t)). t = Time difference.
             risk = 1 - Math.pow(Math.E, -timeDifference);
         } else {
             risk = 0.5;
@@ -129,47 +131,21 @@ public class GetLoginBehaviourRisk extends FunctionExecutor {
         return risk;
     }
 
-    /**
-     * The main execution method which will be called upon event arrival
-     * when there are zero or one Function parameter
-     *
-     * @param data null if the Function parameter count is zero or
-     *             runtime data value of the Function parameter
-     * @return the Function result
-     */
     @Override
     protected Object execute(Object data) {
         return null;
     }
 
-    /**
-     * return a Class object that represents the formal return type of the method represented by this Method object.
-     *
-     * @return the return type for the method this object represents
-     */
     @Override
     public Attribute.Type getReturnType() {
         return Attribute.Type.DOUBLE;
     }
 
-    /**
-     * Used to collect the serializable state of the processing element, that need to be
-     * persisted for reconstructing the element to the same state on a different point of time
-     *
-     * @return stateful objects of the processing element as an map
-     */
     @Override
     public Map<String, Object> currentState() {
-        return Collections.emptyMap();
+        return null;
     }
 
-    /**
-     * Used to restore serialized state of the processing element, for reconstructing
-     * the element to the same state as if was on a previous point of time.
-     *
-     * @param state the stateful objects of the processing element as a map.
-     *              This is the same map that is created upon calling currentState() method.
-     */
     @Override
     public void restoreState(Map<String, Object> state) {
 
@@ -179,30 +155,22 @@ public class GetLoginBehaviourRisk extends FunctionExecutor {
         String geovelocityResolverImplClassName = configReader.readConfig("geoVelocityResolverClass",
                 DEFAULT_GEOVELOCITY_RESOLVER_CLASSNAME);
         try {
-            geoVelocityDataResolverImpl = (GeoVelocityDataResolver) Class.forName(
-                    geovelocityResolverImplClassName).newInstance();
+            geoVelocityDataResolverImpl = GeoVelocityDataResolverHolder.getGeoVelocityResolverHolderInstance().
+                    getGeoVelocityDataResolver(geovelocityResolverImplClassName);
             geoVelocityDataResolverImpl.init(configReader);
-            isExtensionConfigInitialized.set(true);
-        } catch (InstantiationException e) {
-            throw new SiddhiAppValidationException("Cannot instantiate " +
-                    "GeoVelocityDataResolver implementation class '"
-                    + geovelocityResolverImplClassName + "' given in the configuration", e);
-        } catch (IllegalAccessException e) {
-            throw new SiddhiAppValidationException("Cannot access " +
-                    "GeoVelocityDataResolver implementation class '"
-                    + geovelocityResolverImplClassName + "' given in the configuration", e);
-        } catch (ClassNotFoundException e) {
-            throw new SiddhiAppValidationException("Cannot find " +
-                    "GeoVelocityDataResolver implementation class '"
-                    + geovelocityResolverImplClassName + "' given in the configuration", e);
-        } catch (ClassCastException e) {
-            throw new SiddhiAppValidationException("Cannot cast " +
-                    "GeoVelocityDataResolver implementation class '"
-                    + geovelocityResolverImplClassName + "' to 'GeoVelocityDataResolver'", e);
         } catch (GeoVelocityException e) {
             throw new SiddhiAppValidationException("Cannot initialize " +
                     "GeoVelocityDataResolver implementation class '"
                     + geovelocityResolverImplClassName + "' given in the configuration", e);
+        } catch (InstantiationException e) {
+            throw new SiddhiAppValidationException("Cannot instantiate GeoCoordinateResolverHolder holder class '"
+                    + geovelocityResolverImplClassName , e);
+        } catch (IllegalAccessException e) {
+            throw new SiddhiAppValidationException("Cannot access GeoCoordinateResolverHolder holder class '"
+                    + geovelocityResolverImplClassName , e);
+        } catch (ClassNotFoundException e) {
+            throw new SiddhiAppValidationException("Cannot find GeoCoordinateResolverHolder holder class '"
+                    + geovelocityResolverImplClassName , e);
         }
     }
 }

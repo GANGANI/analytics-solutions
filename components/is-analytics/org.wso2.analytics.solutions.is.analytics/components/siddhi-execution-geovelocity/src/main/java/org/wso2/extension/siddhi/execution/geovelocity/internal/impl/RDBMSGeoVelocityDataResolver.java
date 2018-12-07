@@ -60,13 +60,12 @@ public class RDBMSGeoVelocityDataResolver {
             return;
         }
         isPersistInDatabase = Boolean.parseBoolean(configReader.readConfig(CONFIG_KEY_ISPERSIST_IN_DATABASE, "true"));
-
         dbUtils = DatabaseUtils.getInstance();
         dbUtils.initialize(configReader.readConfig(CONFIG_KEY_DATASOURCE, DEFAULT_DATASOURCE_NAME));
         isInitialized.set(true);
     }
 
-    GeoVelocityData getGeoVelocityData(String username, String city) {
+    public GeoVelocityData getGeoVelocityData(String username, String city) {
         GeoVelocityData geoVelocityData = null;
         Connection connection = null;
         try {
@@ -74,14 +73,14 @@ public class RDBMSGeoVelocityDataResolver {
             geoVelocityData = loadGeoVelocityData(username, city, connection);
         } catch (SQLException e) {
             log.error("Cannot retrieve the login time of the last " +
-                    "successful login from the give locationfrom database ", e);
+                    "successful login from the give location from database ", e);
         } finally {
             dbUtils.closeAllConnections(null, connection, null);
         }
         return geoVelocityData;
     }
 
-    GeoVelocityData getRestrictedLocations(String currentCity, String previousCity,
+    public GeoVelocityData getRestrictedLocations(String currentCity, String previousCity,
                                  String currentCountry, String previousCountry) {
         GeoVelocityData geoVelocityData = null;
         Connection connection = null;
@@ -110,6 +109,7 @@ public class RDBMSGeoVelocityDataResolver {
         GeoVelocityData geoVelocityData = null;
         PreparedStatement statement = null;
         ResultSet resultSet = null;
+        // "Try with resources" add proper log
         try {
             if (isPersistInDatabase) {
                 statement = connection.prepareStatement(SQL_SELECT_LASTLOGINTIME_FROM_GEOVELOCITY_INFO);

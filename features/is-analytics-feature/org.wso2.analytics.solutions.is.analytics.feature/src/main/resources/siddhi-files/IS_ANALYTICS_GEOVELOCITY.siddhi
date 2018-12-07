@@ -17,9 +17,8 @@ define stream OutputStream (
     risk double);
 
 -- GEOVELOCITY_INFO database table to store updated login data of a user.
-@primaryKey('loginTime')
-@index('loginTime')
-@store(type='rdbms', datasource='IS_ANALYTICS_DB', 'field.length=username:20, loginTime:20, loginIp:20, city:20')
+@primaryKey('username')
+@store(type='rdbms', datasource='IS_ANALYTICS_DB')
 define table GEOVELOCITY_INFO(
     username string,
     loginTime long,

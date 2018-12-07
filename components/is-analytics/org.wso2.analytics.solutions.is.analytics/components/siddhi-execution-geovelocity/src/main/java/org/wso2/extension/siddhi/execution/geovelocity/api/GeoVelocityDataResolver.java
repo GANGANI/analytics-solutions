@@ -50,8 +50,8 @@ public interface GeoVelocityDataResolver {
     /**
      * This method will be invoked after the initializing the extension. You can do any initial configuration here.
      *
-     * @param configReader
-     * @throws GeoVelocityException
+     * @param configReader  this hold the extensions configuration reader
+     * @throws GeoVelocityException this will throws a GeoVelocityException.
      */
     public void init(ConfigReader configReader) throws GeoVelocityException;
 

@@ -20,6 +20,7 @@ package org.wso2.extension.siddhi.execution.geovelocity;
 import org.wso2.extension.siddhi.execution.geovelocity.api.GeoVelocityData;
 import org.wso2.extension.siddhi.execution.geovelocity.api.GeoVelocityDataResolver;
 import org.wso2.extension.siddhi.execution.geovelocity.internal.exception.GeoVelocityException;
+import org.wso2.extension.siddhi.execution.geovelocity.internal.impl.GeoVelocityDataResolverHolder;
 import org.wso2.siddhi.annotation.Example;
 import org.wso2.siddhi.annotation.Extension;
 import org.wso2.siddhi.annotation.Parameter;
@@ -31,16 +32,15 @@ import org.wso2.siddhi.core.executor.function.FunctionExecutor;
 import org.wso2.siddhi.core.util.config.ConfigReader;
 import org.wso2.siddhi.query.api.definition.Attribute;
 import org.wso2.siddhi.query.api.exception.SiddhiAppValidationException;
-import java.util.Collections;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * This is a class to get the risk based on restricted area combinations.
  */
 @Extension(
-        name = "restrictedareabasedrisk",
+        name = "restrictedAreaBasedRisk",
         namespace = "geovelocity",
+        // add more to the description
         description = "Returns risk score based on the restricted area " +
                 "combinations considering the previous login and the current login attempt",
         parameters = {
@@ -50,7 +50,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
                         type = {DataType.STRING}),
                 @Parameter(
                         name = "previous.login.city",
-                        description = "user's last login city",
+                        description = "user's previous login city",
                         type = {DataType.STRING}),
                 @Parameter(
                         name = "current.login.country",
@@ -64,52 +64,66 @@ import java.util.concurrent.atomic.AtomicBoolean;
         returnAttributes =
         @ReturnAttribute(
                 description = "Returns risk score based on the restricted area " +
-                        "combinations considering the previous login and the current login attempt",
+                        "combinations considering the previous login and the current login attempt." +
+                        "Risk value which is based on restricted location combination is either 1 or 0." +
+                        "If the current and previous login location is according to the predefined " +
+                        "restricted location combinations, restricted area based risk value is 1, " +
+                        "otherwise it's 0.",
                 type = {DataType.INT}),
         examples = @Example(
                 description = "This will return risk score based on the restricted area " +
-                        "combinations considering the locations of the previous login and the current login attempt",
-                syntax = "define stream GeovelocityStream(currentlocation string,lastlocation string);" +
+                        "combinations considering the locations of the previous login and the current login" +
+                        " attempt. Assume Alex previous login location is South Korea and current login " +
+                        "location is North Korea. Since it's defined that it's restricted to travel from " +
+                        "South Korea to North Korea, risk is 1",
+                syntax = "define stream GeovelocityStream(current.login.city string, " +
+                        "previous.login.city string, current.login.country string, previous.login.country string);" +
                         "from GeovelocityStream" +
-                        "select geo:restrictedareabasedrisk(current.login.city, previous.login.city, " +
+                        "select geovelocity:restrictedAreaBasedRisk(current.login.city, previous.login.city, " +
                         "current.login.country, previous.login.country) as restrictedareabasedrisk" +
                         "insert into outputStream;")
 )
 
 public class CheckRestrictedAreas extends FunctionExecutor {
-    private static GeoVelocityDataResolver geoVelocityDataResolverImpl;
     private static final String DEFAULT_GEOVELOCITY_RESOLVER_CLASSNAME =
             "org.wso2.extension.siddhi.execution.geovelocity.internal.impl.DefaultDBBasedGeoVelocityDataResolver";
-    private static AtomicBoolean isExtensionConfigInitialized = new AtomicBoolean(false);
+    private static GeoVelocityDataResolver geoVelocityDataResolverImpl;
 
-    /**
-     * The initialization method for {@link FunctionExecutor}, which will be called before other methods and validate
-     * the all configuration and getting the initial values.
-     *
-     * @param attributeExpressionExecutors are the executors of each attributes in the Function
-     * @param configReader                 this hold the {@link FunctionExecutor} extensions configuration reader.
-     * @param siddhiAppContext             Siddhi app runtime context
-     */
     @Override
     protected void init(ExpressionExecutor[] attributeExpressionExecutors, ConfigReader configReader,
                         SiddhiAppContext siddhiAppContext) {
+        initializeExtensionConfigs(configReader);
         if (attributeExpressionExecutors.length != 4) {
-            throw new SiddhiAppValidationException("Invalid no of arguments passed to geo:restrictedareabasedrisk " +
-                    "function, required 4, but found " + attributeExpressionExecutors.length);
+            throw new SiddhiAppValidationException("Invalid no of arguments passed to " +
+                    "geovelocity:restrictedareabasedrisk function, required 4, but found "
+                    + attributeExpressionExecutors.length);
         }
-
-        if (!isExtensionConfigInitialized.get()) {
-            initializeExtensionConfigs(configReader);
+        Attribute.Type attributeType = attributeExpressionExecutors[0].getReturnType();
+        if (attributeType != Attribute.Type.STRING) {
+            throw new SiddhiAppValidationException("Invalid parameter type found for first " +
+                    "argument current.login.city of geovelocity:loginbehaviourbasedrisk() function, required "
+                    + Attribute.Type.STRING + ", but found " + attributeType.toString());
+        }
+        Attribute.Type secondattributeType = attributeExpressionExecutors[1].getReturnType();
+        if (secondattributeType != Attribute.Type.STRING) {
+            throw new SiddhiAppValidationException("Invalid parameter type found for second argument " +
+                    "previous.login.city of geovelocity:loginbehaviourbasedrisk() function, required " +
+                    Attribute.Type.STRING + ", but found " + secondattributeType.toString());
+        }
+        Attribute.Type thirdattributeType = attributeExpressionExecutors[2].getReturnType();
+        if (thirdattributeType != Attribute.Type.STRING) {
+            throw new SiddhiAppValidationException("Invalid parameter type found for third argument " +
+                    "current.login.country of geovelocity:loginbehaviourbasedrisk() function, required "
+                    + Attribute.Type.STRING + ", but found " + thirdattributeType.toString());
+        }
+        Attribute.Type fourthattributeType = attributeExpressionExecutors[3].getReturnType();
+        if (fourthattributeType != Attribute.Type.STRING) {
+            throw new SiddhiAppValidationException("Invalid parameter type found for fourth argument " +
+                    "previous.login.country of geovelocity:loginbehaviourbasedrisk() function, required "
+                    + Attribute.Type.STRING + ", but found " + fourthattributeType.toString());
         }
     }
 
-    /**
-     * The main execution method which will be called upon event arrival
-     * when there are more than one Function parameter
-     *
-     * @param data the runtime values of Function parameters
-     * @return the Function result
-     */
     @Override
     protected Object execute(Object[] data) {
         GeoVelocityData geoVelocityData;
@@ -118,47 +132,21 @@ public class CheckRestrictedAreas extends FunctionExecutor {
         return geoVelocityData.checkSuspiciousLogin();
     }
 
-    /**
-     * The main execution method which will be called upon event arrival
-     * when there are zero or one Function parameter
-     *
-     * @param data null if the Function parameter count is zero or
-     *             runtime data value of the Function parameter
-     * @return the Function result
-     */
     @Override
     protected Object execute(Object data) {
         return null;
     }
 
-    /**
-     * return a Class object that represents the formal return type of the method represented by this Method object.
-     *
-     * @return the return type for the method this object represents
-     */
     @Override
     public Attribute.Type getReturnType() {
         return Attribute.Type.INT;
     }
 
-    /**
-     * Used to collect the serializable state of the processing element, that need to be
-     * persisted for reconstructing the element to the same state on a different point of time
-     *
-     * @return stateful objects of the processing element as an map
-     */
     @Override
     public Map<String, Object> currentState() {
-        return Collections.emptyMap();
+        return null;
     }
 
-    /**
-     * Used to restore serialized state of the processing element, for reconstructing
-     * the element to the same state as if was on a previous point of time.
-     *
-     * @param state the stateful objects of the processing element as a map.
-     *              This is the same map that is created upon calling currentState() method.
-     */
     @Override
     public void restoreState(Map<String, Object> state) {
 
@@ -168,30 +156,22 @@ public class CheckRestrictedAreas extends FunctionExecutor {
         String geovelocityResolverImplClassName = configReader.readConfig("geoVelocityResolverClass",
                 DEFAULT_GEOVELOCITY_RESOLVER_CLASSNAME);
         try {
-            geoVelocityDataResolverImpl = (GeoVelocityDataResolver) Class.forName(
-                    geovelocityResolverImplClassName).newInstance();
+            geoVelocityDataResolverImpl = GeoVelocityDataResolverHolder.getGeoVelocityResolverHolderInstance().
+                    getGeoVelocityDataResolver(geovelocityResolverImplClassName);
             geoVelocityDataResolverImpl.init(configReader);
-            isExtensionConfigInitialized.set(true);
-        } catch (InstantiationException e) {
-            throw new SiddhiAppValidationException("Cannot instantiate " +
-                    "GeoVelocityDataResolver implementation class '"
-                    + geovelocityResolverImplClassName + "' given in the configuration", e);
-        } catch (IllegalAccessException e) {
-            throw new SiddhiAppValidationException("Cannot access " +
-                    "GeoVelocityDataResolver implementation class '"
-                    + geovelocityResolverImplClassName + "' given in the configuration", e);
-        } catch (ClassNotFoundException e) {
-            throw new SiddhiAppValidationException("Cannot find " +
-                    "GeoVelocityDataResolver implementation class '"
-                    + geovelocityResolverImplClassName + "' given in the configuration", e);
-        } catch (ClassCastException e) {
-            throw new SiddhiAppValidationException("Cannot cast " +
-                    "GeoVelocityDataResolver implementation class '"
-                    + geovelocityResolverImplClassName + "' to 'GeoVelocityDataResolver'", e);
         } catch (GeoVelocityException e) {
             throw new SiddhiAppValidationException("Cannot initialize " +
                     "GeoVelocityDataResolver implementation class '"
                     + geovelocityResolverImplClassName + "' given in the configuration", e);
+        } catch (InstantiationException e) {
+            throw new SiddhiAppValidationException("Cannot instantiate GeoCoordinateResolverHolder holder class '"
+                    + geovelocityResolverImplClassName , e);
+        } catch (IllegalAccessException e) {
+            throw new SiddhiAppValidationException("Cannot access GeoCoordinateResolverHolder holder class '"
+                    + geovelocityResolverImplClassName , e);
+        } catch (ClassNotFoundException e) {
+            throw new SiddhiAppValidationException("Cannot find GeoCoordinateResolverHolder holder class '"
+                    + geovelocityResolverImplClassName , e);
         }
     }
 }
